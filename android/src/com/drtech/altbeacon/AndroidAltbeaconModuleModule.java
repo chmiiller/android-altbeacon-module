@@ -88,14 +88,14 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 		
 		//Set BeaconLayout for the beacon manager - this must be done before the service is bound
 		//See: https://github.com/AltBeacon/android-beacon-library/issues/100
-		// addBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24");
+		//addBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24");
 		
 		beaconManager.setForegroundScanPeriod(1200);
 		beaconManager.setForegroundBetweenScanPeriod(2300);
 		beaconManager.setBackgroundScanPeriod(10000);
 		beaconManager.setBackgroundBetweenScanPeriod(60 * 1000);
 		
-		BeaconManager.setDebug(true);
+		//BeaconManager.setDebug(true);
 	}
 	
 	/**
