@@ -88,14 +88,14 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 		
 		//Set BeaconLayout for the beacon manager - this must be done before the service is bound
 		//See: https://github.com/AltBeacon/android-beacon-library/issues/100
-		//addBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24");
+		// addBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24");
 		
 		beaconManager.setForegroundScanPeriod(1200);
 		beaconManager.setForegroundBetweenScanPeriod(2300);
 		beaconManager.setBackgroundScanPeriod(10000);
 		beaconManager.setBackgroundBetweenScanPeriod(60 * 1000);
 		
-		//BeaconManager.setDebug(true);
+		BeaconManager.setDebug(true);
 	}
 	
 	/**
@@ -118,6 +118,22 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 	@Kroll.method
 	public void bindBeaconService() {
 		beaconManager.bind(this);
+	}
+	
+	/**
+	 * Unbinds the activity to the Beacon Service
+	 */
+	@Kroll.method
+	public void unbindBeaconService() {
+		beaconManager.unbind(this);
+	}
+	
+	/**
+	 * Check the activity is bound to the Beacon Service
+	 */
+	@Kroll.method
+	public boolean beaconServiceIsBound() {
+		return beaconManager.isBound(this);
 	}
 
 	/**
@@ -365,7 +381,8 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 		// This method is called when the module is loaded and the root context is started
 
 		Log.d(LCAT, "[MODULE LIFECYCLE EVENT] start");
-		//beaconManager.bind(this);
+		addBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24");
+		beaconManager.bind(this);
 
 		super.onStart(activity);
 	}
@@ -377,9 +394,10 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 
 		Log.d(LCAT, "[MODULE LIFECYCLE EVENT] stop");
 
-		//if (!beaconManager.isBound(this)) {
-		//	beaconManager.bind(this);
-		//}
+		if (!beaconManager.isBound(this)) {
+			addBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24");
+			beaconManager.bind(this);
+		}
 		super.onStop(activity);
 	}
 
@@ -389,9 +407,10 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 		// This method is called when the root context is being suspended
 
 		Log.d(LCAT, "[MODULE LIFECYCLE EVENT] pause");
-		//if (!beaconManager.isBound(this)) {
-		//	beaconManager.bind(this);
-		//}
+		if (!beaconManager.isBound(this)) {
+			addBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24");
+			beaconManager.bind(this);
+		}
 		
 		super.onPause(activity);
 	}
@@ -402,9 +421,10 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 		// This method is called when the root context is being resumed
 
 		Log.d(LCAT, "[MODULE LIFECYCLE EVENT] resume");
-		//if (!beaconManager.isBound(this)) {
-		//	beaconManager.bind(this);
-		//}
+		if (!beaconManager.isBound(this)) {
+			addBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24");
+			beaconManager.bind(this);
+		}
 
 		super.onResume(activity);
 	}
@@ -415,16 +435,12 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 		// This method is called when the root context is being destroyed
 
 		Log.d(LCAT, "[MODULE LIFECYCLE EVENT] destroy");
-		//beaconManager.unbind(this);
-		if (activity.isFinishing()) {
-			Log.d(LCAT, "[MODULE LIFECYCLE EVENT] destroy - isFinishing==true");
-			beaconManager.unbind(this);
-		}
+		beaconManager.unbind(this);
+		
 		super.onDestroy(activity);
 	}
 	
 	public void onBeaconServiceConnect() {
-
 		Log.d(LCAT, "onBeaconServiceConnect");
 		beaconManager.setMonitorNotifier(new MonitorNotifier() {
 
@@ -509,6 +525,7 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 			}
 
 		});
+        fireEvent("onBeaconServiceConnect", null);
 	}
 	
 	/**
@@ -590,11 +607,11 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 
 	public void unbindService(ServiceConnection serviceConnection) {
 		Log.d(LCAT, "unbindService");
-		super.getActivity().unbindService(serviceConnection);
+		super.getActivity().getApplicationContext().unbindService(serviceConnection);
 	}
 
 	public boolean bindService(Intent intent, ServiceConnection serviceConnection, int i) {
 		Log.d(LCAT, "bindService");
-		return super.getActivity().bindService(intent, serviceConnection, i);
+		return super.getActivity().getApplicationContext().bindService(intent, serviceConnection, i);
 	}
 }
