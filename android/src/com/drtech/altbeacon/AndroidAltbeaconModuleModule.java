@@ -374,7 +374,7 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 		}
 		
 	}
-	
+
 	@Override
 	public void onStart(Activity activity)
 	{
@@ -527,7 +527,7 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 		});
         fireEvent("onBeaconServiceConnect", null);
 	}
-	
+
 	/**
 	 * Sets the upper proximity ranges.
 	 */
