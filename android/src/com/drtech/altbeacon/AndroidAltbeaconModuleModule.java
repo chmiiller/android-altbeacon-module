@@ -1,8 +1,8 @@
 /**
- * 
+ *
  * Modifications Copyright 2015 David Kopczyk. All rights reserved.
  * Adapted from LiferayBeaconsModule.java authored by James Falkner
- * 
+ *
  * Copyright 2015 Liferay, Inc. All rights reserved.
  * http://www.liferay.com
  *
@@ -40,14 +40,23 @@ import org.altbeacon.beacon.Identifier;
 import org.altbeacon.beacon.MonitorNotifier;
 import org.altbeacon.beacon.RangeNotifier;
 import org.altbeacon.beacon.Region;
+import org.altbeacon.beacon.powersave.BackgroundPowerSaver;
+import org.altbeacon.beacon.startup.BootstrapNotifier;
+import org.altbeacon.beacon.startup.RegionBootstrap;
+
+import org.appcelerator.kroll.KrollFunction;
 import org.appcelerator.kroll.KrollDict;
 import org.appcelerator.kroll.KrollModule;
 import org.appcelerator.kroll.annotations.Kroll;
 import org.appcelerator.kroll.common.Log;
 import org.appcelerator.kroll.common.TiConfig;
 import org.appcelerator.titanium.TiApplication;
+import org.appcelerator.titanium.TiBaseActivity;
+import org.appcelerator.titanium.TiC;
 import org.appcelerator.titanium.util.TiConvert;
 
+import android.Manifest;
+import android.os.Build;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -55,8 +64,75 @@ import android.content.pm.PackageManager;
 import android.content.ServiceConnection;
 import android.os.RemoteException;
 
+
 @Kroll.module(name = "AltbeaconAndroidModule", id = "com.drtech.altbeacon")
 public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconConsumer {
+
+	//Altbeacon BOOTSTRAP CLASS
+	/*
+	* As described here: http://altbeacon.github.io/android-beacon-library/background_launching.html
+	* we have to do some initializations on the Application class. As Titanium is writing this class
+	* on build time, we're creating and starting this AltbeaconBootstrap class on module onAppCreate()
+	*/
+	private static class AltbeaconBootstrap implements BootstrapNotifier {
+		private TiApplication app;
+		private static final String LCAT = "AltbeaconBootstrap";
+
+		public AltbeaconBootstrap(TiApplication app){
+			this.app = app;
+		}
+
+	    @Override
+	    public void didEnterRegion(Region region) {
+	        Log.d("*** "," background didEnterRegion");
+			try {
+				Log.d(LCAT, "Entered region " + region);
+				if(app != null){
+					//START THE APP IN THE FOREGROUND
+					TiApplication appInstance = app.getInstance();
+					PackageManager pm = appInstance.getPackageManager();
+					Intent intent = pm.getLaunchIntentForPackage(appInstance.getPackageName());
+					intent.addCategory(Intent.CATEGORY_LAUNCHER);
+					intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+					intent.putExtra("message", region.toString());
+					if(region.getId1() != null){
+						intent.putExtra("uuid", region.getId1().toString());
+					}
+
+					if(region.getId2() != null){
+						intent.putExtra("major", region.getId2().toString());
+					}
+
+					if(region.getId3() != null){
+						intent.putExtra("minor", region.getId3().toString());
+					}
+
+					appInstance.startActivity(intent);
+				}
+
+			} catch (Exception ex) {
+				Log.e(LCAT, "Cannot turn on ranging for region " + region.getUniqueId(), ex);
+			}
+	    }
+
+	    @Override
+	    public void didDetermineStateForRegion(int arg0, Region arg1) {
+			Log.d(LCAT, "background didDetermineStateForRegion arg0: " + arg0);
+			Log.d(LCAT, "background didDetermineStateForRegion region: " + arg1);
+	    }
+
+	    @Override
+	    public void didExitRegion(Region region) {
+	        Log.d("*** "," background didExitRegion");
+	    }
+
+		@Override
+	    public Context getApplicationContext() {
+	        return app.getInstance().getApplicationContext();
+	    }
+	}
+
 	private static BeaconTransmitter beaconTransmitter;
 	private static BeaconManager beaconManager;
 	private boolean autoRange = true;
@@ -66,16 +142,53 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 	private static final String LCAT = "AltbeaconModule";
 	private static final boolean DBG = TiConfig.LOGD;
 
+	private static RegionBootstrap regionBootstrap;
+	private static AltbeaconBootstrap myBootstrap;
+
 	private static double PROXIMITY_IMMEDIATE = 0.3;
 	private static double PROXIMITY_NEAR = 3.0;
 	private static double PROXIMITY_FAR = 10.0;
 
 	@Kroll.onAppCreate
 	public static void onAppCreate(TiApplication app) {
-		Log.d(LCAT, "Create beaconmanager, setup in foregroundmode");
 		beaconManager = BeaconManager.getInstanceForApplication(app);
-		beaconManager.setBackgroundMode(false);
-		beaconManager.setDebug(false);
+		beaconManager.setBackgroundMode(true);
+		beaconManager.setDebug(true);
+
+		beaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24"));
+		myBootstrap = new AltbeaconBootstrap(app);
+		Region region = new Region("My Bootstrap Region", Identifier.parse("00000000-0000-0000-0000-000000000000"), null, null);
+        regionBootstrap = new RegionBootstrap(myBootstrap, region);
+	}
+
+	@Kroll.method
+	private boolean hasLocationPermission() {
+	    if (Build.VERSION.SDK_INT < 23) {
+	        return true;
+	    }
+	    Activity currentActivity = TiApplication.getInstance().getCurrentActivity();
+	    if (currentActivity.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+	        return true;
+	    }
+	    return false;
+	}
+
+	@Kroll.method
+	public void requestLocationPermissions(@Kroll.argument(optional=true)KrollFunction permissionCallback)
+	{
+		if (hasLocationPermission()) {
+			return;
+		}
+
+		if (TiBaseActivity.cameraCallbackContext == null) {
+			TiBaseActivity.cameraCallbackContext = getKrollObject();
+		}
+		TiBaseActivity.cameraPermissionCallback = permissionCallback;
+		String[] permissions = null;
+		permissions = new String[] {Manifest.permission.ACCESS_COARSE_LOCATION};
+
+		Activity currentActivity = TiApplication.getInstance().getCurrentActivity();
+		currentActivity.requestPermissions(permissions, TiC.PERMISSION_CODE_CAMERA);
 	}
 
 	/**
@@ -277,6 +390,10 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 
 			Log.d(LCAT, "Beginning to monitor region " + r);
 			beaconManager.startMonitoringBeaconsInRegion(r);
+
+			//Here we add the region 'r' to the regionBootstrap for background monitoring (when the app is closed)
+			regionBootstrap.addRegion(r);
+
 		} catch (RemoteException ex) {
 			Log.e(LCAT, "Cannot start monitoring region " + TiConvert.toString(region, "identifier"), ex);
 		}
@@ -472,6 +589,8 @@ public class AndroidAltbeaconModuleModule extends KrollModule implements BeaconC
 				}
 
 			}
+
+
 		});
 
 		beaconManager.setRangeNotifier(new RangeNotifier() {
